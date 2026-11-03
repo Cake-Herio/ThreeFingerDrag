@@ -4,6 +4,7 @@
 #include "../mouse/cursor.h"
 #include "../logging/logger.h"
 #include <array>
+#include <algorithm>
 #include <numeric>
 
 namespace EventListeners
@@ -53,8 +54,12 @@ namespace EventListeners
                     DEBUG("Started gesture.");
             }
 
-            // After all fingers lift, keep the drag held during the cancellation delay.
-            // Fingers may return one at a time; partial contact must not end the drag.
+            if (!config->IsCancellationStarted())
+                recontact_ready_ = false;
+
+            // Keep the target held while fingers return, but require all three
+            // before movement. Native one-finger cursor motion also drags while
+            // the left button is held, so partial-contact movement must release it.
             if (config->IsCancellationStarted())
             {
                 if (CalculateElapsedTimeMs(config->GetCancellationTime(), current_time) >=
@@ -66,17 +71,38 @@ namespace EventListeners
 
                 if (!args.data->can_perform_gesture)
                 {
+                    recontact_ready_ = false;
                     accumulated_delta_x_.fill(0);
                     accumulated_delta_y_.fill(0);
+                    for (const auto& contact : args.data->contacts)
+                    {
+                        if (!contact.on_surface)
+                            continue;
+                        for (const auto& previous : args.previous_data)
+                        {
+                            if (previous.on_surface && contact.contact_id == previous.contact_id &&
+                                (contact.x != previous.x || contact.y != previous.y))
+                            {
+                                CancelGesture();
+                                return;
+                            }
+                        }
+                    }
                     return;
                 }
 
-                // Three fingers have returned: resume the held drag with a fresh
-                // stabilization period and without movement from the partial contacts.
-                config->SetCancellationStarted(false);
-                gesture_start_ = current_time;
-                accumulated_delta_x_.fill(0);
-                accumulated_delta_y_.fill(0);
+                // Start stabilization once all three return. Keep the original
+                // deadline until they actually move; merely landing is not a resume.
+                const auto previous_contact_count = std::count_if(
+                    args.previous_data.begin(), args.previous_data.end(),
+                    [](const TouchContact& contact) { return contact.on_surface; });
+                if (!recontact_ready_ || previous_contact_count != NUM_TOUCH_CONTACTS_REQUIRED)
+                {
+                    recontact_ready_ = true;
+                    gesture_start_ = current_time;
+                    accumulated_delta_x_.fill(0);
+                    accumulated_delta_y_.fill(0);
+                }
             }
 
             // If there's no previous data, return
@@ -181,6 +207,9 @@ namespace EventListeners
             const double delta_y =
                 std::accumulate(accumulated_delta_y_.begin(), accumulated_delta_y_.end(), 0.0) * gesture_speed;
 
+            if (config->IsCancellationStarted() && std::abs(delta_x) < 1.0 && std::abs(delta_y) < 1.0)
+                return;
+
             config->SetCancellationStarted(false);
 
             // Move the mouse pointer based on the calculated vector
@@ -209,6 +238,7 @@ namespace EventListeners
         }
 
     private:
+        bool recontact_ready_ = false;
         std::array<double, MAX_CONTACT_SIZE> accumulated_delta_x_ = {0.0};
         std::array<double, MAX_CONTACT_SIZE> accumulated_delta_y_ = {0.0};
         std::array<std::chrono::time_point<std::chrono::steady_clock>, MAX_CONTACT_SIZE> movement_times_;
