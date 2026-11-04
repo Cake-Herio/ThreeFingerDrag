@@ -3,6 +3,7 @@
 #include "../event/touch_events.h"
 #include "../mouse/cursor.h"
 #include "../logging/logger.h"
+#include <algorithm>
 #include <array>
 #include <numeric>
 
@@ -53,6 +54,77 @@ namespace EventListeners
                     DEBUG("Started gesture.");
             }
 
+            // After all fingers lift, keep the drag held during the cancellation delay.
+            // Fingers may return one at a time, provided they remain still.
+            if (config->IsCancellationStarted())
+            {
+                if (CalculateElapsedTimeMs(config->GetCancellationTime(), current_time) >=
+                    config->GetCancellationDelayMs())
+                {
+                    CancelGesture();
+                    return;
+                }
+
+                const int contact_count = std::count_if(args.data->contacts.begin(), args.data->contacts.end(),
+                    [](const TouchContact& contact) { return contact.on_surface; });
+                if (contact_count > NUM_TOUCH_CONTACTS_REQUIRED)
+                {
+                    CancelGesture();
+                    return;
+                }
+
+                // Lifting or replacing a returning finger ends this attempt.
+                for (const auto& previous : args.previous_data)
+                {
+                    if (!previous.on_surface)
+                        continue;
+                    const auto current = std::find_if(args.data->contacts.begin(), args.data->contacts.end(),
+                        [&previous](const TouchContact& item)
+                        {
+                            return item.on_surface && item.contact_id == previous.contact_id;
+                        });
+                    if (current == args.data->contacts.end())
+                    {
+                        CancelGesture();
+                        return;
+                    }
+                }
+
+                // Check existing contacts even when the third finger arrives in
+                // this event, so earlier single-finger motion cannot resume a drag.
+                for (const auto& contact : args.data->contacts)
+                {
+                    if (!contact.on_surface)
+                        continue;
+
+                    const auto previous = std::find_if(args.previous_data.begin(), args.previous_data.end(),
+                        [&contact](const TouchContact& item)
+                        {
+                            return item.on_surface && item.contact_id == contact.contact_id;
+                        });
+                    if (previous != args.previous_data.end() &&
+                        (contact.x != previous->x || contact.y != previous->y))
+                    {
+                        CancelGesture();
+                        return;
+                    }
+                }
+
+                if (!args.data->can_perform_gesture)
+                {
+                    accumulated_delta_x_.fill(0);
+                    accumulated_delta_y_.fill(0);
+                    return;
+                }
+
+                // Three fingers have returned: resume the held drag with a fresh
+                // stabilization period and without movement from the partial contacts.
+                config->SetCancellationStarted(false);
+                gesture_start_ = current_time;
+                accumulated_delta_x_.fill(0);
+                accumulated_delta_y_.fill(0);
+            }
+
             // If there's no previous data, return
             if (args.previous_data.empty())
                 return;
@@ -101,13 +173,6 @@ namespace EventListeners
 
                 if (ms_since_movement > INACTIVITY_THRESHOLD_MS)
                     continue;
-
-                // Cancel immediately if a previous cancellation has begun, and this is a non-gesture movement
-                if (config->IsCancellationStarted() && !args.data->can_perform_gesture && config->IsGestureStarted())
-                {
-                    CancelGesture();
-                    return;
-                }
 
                 // Calculate the movement delta for the current finger
                 const double x_diff = contact.x - previous_contact.x;
@@ -203,7 +268,15 @@ namespace EventListeners
         {
             config->SetPreviousTouchContacts(args.data->contacts);
 
-            if (config->IsCancellationStarted() || !config->IsGestureStarted())
+            if (config->IsCancellationStarted())
+            {
+                // A partial re-contact ended before all three fingers returned.
+                if (std::any_of(args.previous_data.begin(), args.previous_data.end(),
+                    [](const TouchContact& contact) { return contact.on_surface; }))
+                    CancelGesture();
+                return;
+            }
+            if (!config->IsGestureStarted())
                 return;
 
             // Calculate the time elapsed since the last valid gesture movement
