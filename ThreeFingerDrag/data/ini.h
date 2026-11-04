@@ -1,3 +1,4 @@
+#include <filesystem>
 /*
  * The MIT License (MIT)
  * Copyright (c) 2018 Danijel Durakovic
@@ -405,7 +406,7 @@ namespace mINI
     public:
         INIReader(std::string const& filename, bool keepLineData = false)
         {
-            fileReadStream.open(filename, std::ios::in | std::ios::binary);
+            fileReadStream.open(std::filesystem::u8path(filename), std::ios::in | std::ios::binary);
             if (keepLineData)
             {
                 lineData = std::make_shared<T_LineData>();
@@ -468,7 +469,7 @@ namespace mINI
 
         INIGenerator(std::string const& filename)
         {
-            fileWriteStream.open(filename, std::ios::out | std::ios::binary);
+            fileWriteStream.open(std::filesystem::u8path(filename), std::ios::out | std::ios::binary);
         }
 
         ~INIGenerator()
@@ -707,8 +708,7 @@ namespace mINI
 
         bool operator<<(INIStructure& data)
         {
-            struct stat buf;
-            bool fileExists = (stat(filename.c_str(), &buf) == 0);
+            bool fileExists = std::filesystem::exists(std::filesystem::u8path(filename));
             if (!fileExists)
             {
                 INIGenerator generator(filename);
@@ -732,7 +732,7 @@ namespace mINI
                 return false;
             }
             T_LineData output = getLazyOutput(lineData, data, originalData);
-            std::ofstream fileWriteStream(filename, std::ios::out | std::ios::binary);
+            std::ofstream fileWriteStream(std::filesystem::u8path(filename), std::ios::out | std::ios::binary);
             if (fileWriteStream.is_open())
             {
                 if (fileIsBOM)

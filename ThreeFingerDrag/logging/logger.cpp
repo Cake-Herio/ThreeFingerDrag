@@ -16,19 +16,19 @@ Logger::Logger(const std::string& logFileName)
     log_file_path_ = Application::GetConfigurationFolderPath();
 
     // Check if the folder exists, and create it if necessary
-    if (!std::filesystem::exists(log_file_path_))
-        std::filesystem::create_directory(log_file_path_);
+    if (!std::filesystem::exists(std::filesystem::u8path(log_file_path_)))
+        std::filesystem::create_directory(std::filesystem::u8path(log_file_path_));
 
     log_file_path_ += "\\" + logFileName;
 
     // Check if the log file exists, and create it if necessary
-    if (!std::filesystem::exists(log_file_path_))
+    if (!std::filesystem::exists(std::filesystem::u8path(log_file_path_)))
     {
-        std::ofstream file(log_file_path_, std::ios::out);
+        std::ofstream file(std::filesystem::u8path(log_file_path_), std::ios::out);
         file.close();
     }
 
-    log_file_.open(log_file_path_, std::ios::out | std::ios::app);
+    log_file_.open(std::filesystem::u8path(log_file_path_), std::ios::out | std::ios::app);
 }
 
 void Logger::WriteLog(const std::string& type, const std::string& message)
@@ -40,7 +40,7 @@ void Logger::WriteLog(const std::string& type, const std::string& message)
     {
         // Truncate the log file to zero size
         log_file_.close();
-        std::ofstream file(log_file_path_, std::ios::out | std::ios::trunc);
+        std::ofstream file(std::filesystem::u8path(log_file_path_), std::ios::out | std::ios::trunc);
         file.close();
     }
 

@@ -6,7 +6,7 @@
 #include <Windows.h>
 #include "resource.h"
 #include "logging/logger.h"
-#include "task/task_scheduler.h"
+#include "task/startup_migration.h"
 #include "application.h"
 #include "notification/wintoastlib.h"
 #include "notification/popups.h"

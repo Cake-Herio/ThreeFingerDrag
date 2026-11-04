@@ -4,6 +4,8 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <iomanip>
+#include <stdexcept>
 #include "gesture/touch_processor.h"
 #include "data/ini.h"
 #include "config/globalconfig.h"
@@ -13,8 +15,8 @@ namespace Application
     constexpr bool RELEASE_BUILD = true;
 
     constexpr int VERSION_MAJOR = 1;
-    constexpr int VERSION_MINOR = 2;
-    constexpr int VERSION_PATCH = 7;
+    constexpr int VERSION_MINOR = 3;
+    constexpr int VERSION_PATCH = 0;
 
     constexpr int VERSION_REVISION = 0;
     
@@ -38,8 +40,8 @@ namespace Application
     inline std::string config_folder_path;
 
     /**
-     * @brief Constructs and returns the path to application configuration files. If required, the directory will be created.
-     * @return The local app data folder path
+     * @brief Returns the executable directory containing configuration and logs.
+     * @return The UTF-8 executable directory path
      */
     inline std::string GetConfigurationFolderPath()
     {
@@ -48,26 +50,13 @@ namespace Application
             return config_folder_path;
         }
         
-        if (config->IsPortableMode())
-        {
-            config_folder_path = std::filesystem::current_path().u8string();
-            return config_folder_path;
-        }
-        
-        size_t len;
-        char* env_path;
-        const errno_t err = _dupenv_s(&env_path, &len, "LOCALAPPDATA");
-
-        auto directory_path = std::string(env_path);
-        directory_path += "\\";
-        directory_path += "ThreeFingerDrag";
-
-        config_folder_path = directory_path;
-
-        // Create the application data directory if necessary
-        if (!std::filesystem::exists(directory_path))
-            std::filesystem::create_directory(directory_path);
-        return directory_path;
+        // Resolve from the executable, never from a shortcut/task working directory.
+        wchar_t executable[32768] = {};
+        const DWORD length = GetModuleFileNameW(nullptr, executable, 32768);
+        if (length == 0 || length >= 32768)
+            throw std::runtime_error("Cannot resolve executable directory");
+        config_folder_path = std::filesystem::path(executable).parent_path().u8string();
+        return config_folder_path;
     }
 
     /**
@@ -82,11 +71,11 @@ namespace Application
         version_file_path_ += VERSION_FILE_NAME;
 
         // File contents do not need to update after initial creation
-        if (std::filesystem::exists(version_file_path_))
+        if (std::filesystem::exists(std::filesystem::u8path(version_file_path_)))
             return false;
 
         // Create the file if it has not been created yet, and write the current version to it
-        std::ofstream versionFile(version_file_path_);
+        std::ofstream versionFile(std::filesystem::u8path(version_file_path_));
         if (!versionFile)
             return false;
 
@@ -101,7 +90,6 @@ namespace Application
         std::stringstream ss;
         std::string file_path = GetConfigurationFolderPath();
         
-        file_path += "\\";
         file_path += "\\config.ini";
 
         mINI::INIFile file(file_path);
@@ -123,10 +111,9 @@ namespace Application
     {
         std::string file_path = GetConfigurationFolderPath();
         
-        file_path += "\\";
         file_path += "\\config.ini";
 
-        if (!std::filesystem::exists(file_path))
+        if (!std::filesystem::exists(std::filesystem::u8path(file_path)))
         {
             WriteConfiguration();
             return;
@@ -171,33 +158,8 @@ namespace Application
 
     inline void CheckPortableMode()
     {
-        size_t len;
-        char* env_path;
-        const errno_t err = _dupenv_s(&env_path, &len, "LOCALAPPDATA");
-
-        auto file_path = std::string(env_path);
-        file_path += "\\";
-        file_path += "tfd_install_location.txt";
-
-        std::ifstream file;
-        file.open(file_path);
-
-        // No file was found, so the program probably wasn't installed
-        if (!file.good())
-        {
-            config->SetPortableMode(true);
-            return;
-        }
-
-        std::string firstLine;
-        std::getline(file, firstLine);
-
-        if (firstLine.empty())
-        {
-            return;
-        }
-        // Determine if the program is not running from its installed location
-        config->SetPortableMode(ExePath().u8string().find(firstLine) == std::string::npos);
+        // Both installed and portable copies keep settings alongside the executable.
+        config->SetPortableMode(true);
     }
     
 }

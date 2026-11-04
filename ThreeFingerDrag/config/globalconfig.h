@@ -5,10 +5,10 @@
 #include "../data/touch_data.h"
 #include "../event/touch_events.h"
 
-constexpr auto DEFAULT_ACCELERATION_FACTOR = 15.0;
+constexpr auto DEFAULT_ACCELERATION_FACTOR = 45.0;
 constexpr auto DEFAULT_PRECISION_CURSOR_SPEED = 0.5;
 constexpr auto DEFAULT_MOUSE_CURSOR_SPEED = 0.5;
-constexpr auto DEFAULT_CANCELLATION_DELAY_MS = 500;
+constexpr auto DEFAULT_CANCELLATION_DELAY_MS = 1500;
 constexpr auto DEFAULT_ONE_FINGER_TRANSITION_DELAY_MS = 100;
 constexpr auto DEFAULT_AUTOMATIC_TIMEOUT_DELAY_MS = 33;
 

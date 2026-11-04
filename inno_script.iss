@@ -1,55 +1,72 @@
 #define MyAppName "ThreeFingerDrag"
-#define MyAppVersion "1.2.7"
-#define MyAppPublisher "Austin Nixholm"
-#define MyAppURL "https://github.com/austinnixholm/ThreeFingerDrag"
+#define MyAppVersion "1.3.0"
 #define MyAppExeName "ThreeFingerDrag.exe"
 
 [Setup]
+#ifdef TestInstall
+Uninstallable=no
+CreateUninstallRegKey=no
+#endif
 AppId={{1D896AD4-D9F6-4A5F-9F96-69B369E0A015}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName="{#MyAppName} {#MyAppVersion}"
-AppPublisher={#MyAppPublisher}
-AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}
-AppUpdatesURL={#MyAppURL}
-DefaultDirName={pf}\{#MyAppName}
-DefaultGroupName={#MyAppName}
+AppPublisher=Cake-Herio
+AppPublisherURL=https://github.com/Cake-Herio/ThreeFingerDrag
+DefaultDirName={autopf}\{#MyAppName}
+DisableDirPage=no
 DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 LicenseFile=LICENSE
 OutputDir=installers
-OutputBaseFilename="ThreeFingerDrag.Setup.{#MyAppVersion}"
-SetupIconFile="{#MyAppName}\{#MyAppName}.ico"
-UninstallDisplayIcon="{app}\{#MyAppName}.ico"
-Compression=lzma
+OutputBaseFilename=ThreeFingerDrag.Setup.{#MyAppVersion}
+SetupIconFile=ThreeFingerDrag\ThreeFingerDrag.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
+Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Files]
-Source: "build\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion; AfterInstall: WriteInstallPathToFile
-Source: "{#MyAppName}\{#MyAppName}.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#MyAppName}\small.ico"; DestDir: "{app}"; Flags: ignoreversion
-; NOTE: Don't use "Flags: ignoreversion" on any shared system files
-
-[Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
+Name: "startup"; Description: "Start ThreeFingerDrag when I sign in to Windows"; Flags: unchecked
+
+[Files]
+Source: "build\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "packaging\config.ini"; DestDir: "{app}"; Permissions: users-modify; Flags: onlyifdoesntexist uninsneveruninstall
+Source: "packaging\log.txt"; DestDir: "{app}"; Permissions: users-modify; Flags: onlyifdoesntexist uninsneveruninstall
+Source: "packaging\version.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "INSTALL.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+
+#ifndef TestInstall
+[Icons]
+Name: "{autoprograms}\ThreeFingerDrag"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\ThreeFingerDrag"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "ThreeFingerDrag"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: startup
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "Launch ThreeFingerDrag"; Flags: nowait postinstall skipifsilent runasoriginaluser
+#endif
 
 [Code]
-procedure WriteInstallPathToFile;
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  FilePath: string;
+  Command: String;
 begin
-  FilePath := ExpandConstant('{localappdata}\tfd_install_location.txt');
-  // Write the installation path to the text file, overwriting any existing file
-  SaveStringToFile(FilePath, ExpandConstant('{app}'), False);
+  if CurUninstallStep = usUninstall then
+  begin
+    if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run',
+      'ThreeFingerDrag', Command) then
+      if CompareText(Command, '"' + ExpandConstant('{app}\{#MyAppExeName}') + '"') = 0 then
+        RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'ThreeFingerDrag');
+  end;
 end;

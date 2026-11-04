@@ -1,6 +1,14 @@
-[![Release](https://img.shields.io/github/v/release/austinnixholm/ThreeFingerDrag?label=Download%20version)](https://github.com/austinnixholm/ThreeFingerDrag/releases/latest)
+## Windows Setup (v1.3.0)
+
+Download `ThreeFingerDrag.Setup.1.3.0.exe` from [Releases](https://github.com/Cake-Herio/ThreeFingerDrag/releases/latest).
+Choose an installation folder in Setup. The EXE, config.ini and logs are stored together there.
+Fresh installations default to gesture speed **45** and cancellation delay **1500 ms**.
+Upgrades preserve existing settings. Setup offers an optional Windows sign-in startup checkbox.
+See [INSTALL.md](INSTALL.md) for configuration paths, startup behavior and build instructions.
+
+[![Release](https://img.shields.io/github/v/release/Cake-Herio/ThreeFingerDrag?label=Download%20version)](https://github.com/Cake-Herio/ThreeFingerDrag/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-![GitHub all releases](https://img.shields.io/github/downloads/austinnixholm/threefingerdrag/total)
+![GitHub all releases](https://img.shields.io/github/downloads/Cake-Herio/ThreeFingerDrag/total)
 
 [![TFD-GH-DARK-512.png](https://i.postimg.cc/RZXdx8qh/TFD-GH-DARK-512.png)](https://postimg.cc/hXQT92LR#gh-dark-mode-only)
 [![TFD-GH-LIGHT-512.png](https://i.postimg.cc/ZYW6WnnT/TFD-GH-LIGHT-512.png)](https://postimg.cc/14RFWmGH#gh-light-mode-only)
@@ -15,7 +23,7 @@ Emulates the macOS three-finger-drag feature on your Windows precision touchpad.
 
 ## Usage
 
-1. Download & install the [latest release](https://github.com/austinnixholm/ThreeFingerDrag/releases/latest) from the repository.
+1. Download & install the [latest release](https://github.com/Cake-Herio/ThreeFingerDrag/releases/latest) from the repository.
 3. Launch the program, and you will be prompted to run ThreeFingerDrag on Windows startup. This is optional, and you can always choose to enable or disable this feature later.
 4. ThreeFingerDrag will now run in the background of the system. You can configure the program through the system tray menu, which is accessible by clicking the ThreeFingerDrag icon in the notification area of the taskbar.
 

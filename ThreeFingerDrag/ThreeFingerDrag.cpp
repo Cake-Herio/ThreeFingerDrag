@@ -464,7 +464,7 @@ void CreateTrayMenu(const HWND hWnd)
 void ShowSettingsWindow()
 {
     // Update run on startup checkbox
-    if (TaskScheduler::TaskExists("ThreeFingerDrag"))
+    if (StartupRegistryKeyExists())
         SendMessage(settings_checkbox_hwnd, BM_SETCHECK, BST_CHECKED, 0);
     else
         SendMessage(settings_checkbox_hwnd, BM_SETCHECK, BST_UNCHECKED, 0);
@@ -592,20 +592,22 @@ bool InitializeWindowsNotifications()
  */
 void AddStartupTask()
 {
-    // Remove possible existing registry key from previous version of application
-    if (StartupRegistryKeyExists())
-        RemoveStartupRegistryKey();
-
-    if (TaskScheduler::TaskExists("ThreeFingerDrag"))
+    HKEY key = nullptr;
+    const std::wstring command = L"\"" + Application::ExePath().wstring() + L"\"";
+    const LONG opened = RegCreateKeyExW(HKEY_CURRENT_USER, STARTUP_REGISTRY_KEY, 0, nullptr,
+        0, KEY_SET_VALUE, nullptr, &key, nullptr);
+    LONG result = opened;
+    if (opened == ERROR_SUCCESS)
     {
-        Popups::DisplayInfoMessage("Startup task already exists!");
-        return;
+        result = RegSetValueExW(key, PROGRAM_NAME, 0, REG_SZ,
+            reinterpret_cast<const BYTE*>(command.c_str()),
+            static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(key);
     }
-
-    if (TaskScheduler::CreateLoginTask("ThreeFingerDrag", Application::ExePath().u8string()))
-        Popups::DisplayInfoMessage("Startup task has been created successfully.");
+    if (result == ERROR_SUCCESS)
+        Popups::DisplayInfoMessage("Run on Windows sign-in enabled.");
     else
-        Popups::DisplayErrorMessage("An error occurred while trying to create the login task.");
+        Popups::DisplayErrorMessage("Unable to enable run on Windows sign-in.");
 }
 
 /**
@@ -617,8 +619,7 @@ void RemoveStartupTask()
     if (StartupRegistryKeyExists())
         RemoveStartupRegistryKey();
 
-    TaskScheduler::DeleteTask("ThreeFingerDrag");
-    if (!TaskScheduler::TaskExists("ThreeFingerDrag"))
+    if (!StartupRegistryKeyExists())
         Popups::DisplayInfoMessage("Startup task has been removed successfully.");
 }
 
@@ -681,7 +682,7 @@ void InitializeConfiguration()
 
 void PromptUserForStartupPreference()
 {
-    if (!TaskScheduler::TaskExists("ThreeFingerDrag"))
+    if (!StartupRegistryKeyExists())
     {
         if (Popups::DisplayPrompt("Would you like run ThreeFingerDrag on startup of Windows?", "ThreeFingerDrag"))
             AddStartupTask();
@@ -692,23 +693,14 @@ void PromptUserForStartupPreference()
 
 void PerformAdditionalSteps()
 {
-    // First time running application
+    // Migrate the old per-user scheduled task once. This also avoids duplicate
+    // launches pointing at a previous installation location.
+    StartupMigration::RemoveLegacyTask();
+
     if (Application::IsInitialStartup())
         PromptUserForStartupPreference();
 
-    // Replace legacy startup registry key with login task automatically for previous users
-    if (StartupRegistryKeyExists())
-    {
-        RemoveStartupRegistryKey();
-        TaskScheduler::CreateLoginTask("ThreeFingerDrag", Application::ExePath().u8string());
-    }
-
-    if (config->IsPortableMode())
-    {
-        INFO("Running in portable mode.");
-        INFO(Application::config_folder_path);
-    } else
-        INFO("Running from installed path.");
+    INFO("Configuration directory: " + Application::GetConfigurationFolderPath());
     
     // Notify the user if debug mode is enabled
     if (config->LogDebug())

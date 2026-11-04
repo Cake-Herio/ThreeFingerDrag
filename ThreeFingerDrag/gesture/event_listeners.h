@@ -48,7 +48,10 @@ namespace EventListeners
             const bool is_initial_gesture = !is_dragging && args.data->can_perform_gesture;
             const auto current_time = args.time;
             if (!config->IsCancellationStarted())
+            {
                 recontact_anchors_.clear();
+                recontact_ready_ = false;
+            }
 
             // If it's the initial gesture, set the gesture start time
             if (is_initial_gesture && !config->IsGestureStarted())
@@ -105,6 +108,10 @@ namespace EventListeners
                 // fraction of touchpad travel filters out raw coordinate jitter.
                 for (const auto& contact : args.data->contacts)
                 {
+                    // Once all three are down, their movement is a request to
+                    // resume, not a partial-contact cancellation.
+                    if (contact_count == NUM_TOUCH_CONTACTS_REQUIRED)
+                        break;
                     if (!contact.on_surface)
                         continue;
 
@@ -112,9 +119,9 @@ namespace EventListeners
                     if (inserted)
                         continue;
 
-                    const double x_threshold = std::max(RECONTACT_MOVEMENT_MIN_UNITS,
+                    const double x_threshold = (std::max)(RECONTACT_MOVEMENT_MIN_UNITS,
                         (contact.maximum_x - contact.minimum_x) * RECONTACT_MOVEMENT_FRACTION);
-                    const double y_threshold = std::max(RECONTACT_MOVEMENT_MIN_UNITS,
+                    const double y_threshold = (std::max)(RECONTACT_MOVEMENT_MIN_UNITS,
                         (contact.maximum_y - contact.minimum_y) * RECONTACT_MOVEMENT_FRACTION);
                     if (std::abs(contact.x - anchor->second.x) >= x_threshold ||
                         std::abs(contact.y - anchor->second.y) >= y_threshold)
@@ -128,17 +135,24 @@ namespace EventListeners
 
                 if (!args.data->can_perform_gesture)
                 {
+                    recontact_ready_ = false;
                     accumulated_delta_x_.fill(0);
                     accumulated_delta_y_.fill(0);
                     return;
                 }
 
-                // Three fingers have returned: resume the held drag with a fresh
-                // stabilization period and without movement from the partial contacts.
-                config->SetCancellationStarted(false);
-                gesture_start_ = current_time;
-                accumulated_delta_x_.fill(0);
-                accumulated_delta_y_.fill(0);
+                // Landing alone does not resume the gesture. Keep the waiting
+                // state until three-finger movement passes stabilization.
+                const auto previous_contact_count = std::count_if(
+                    args.previous_data.begin(), args.previous_data.end(),
+                    [](const TouchContact& contact) { return contact.on_surface; });
+                if (!recontact_ready_ || previous_contact_count != NUM_TOUCH_CONTACTS_REQUIRED)
+                {
+                    recontact_ready_ = true;
+                    gesture_start_ = current_time;
+                    accumulated_delta_x_.fill(0);
+                    accumulated_delta_y_.fill(0);
+                }
             }
 
             // If there's no previous data, return
@@ -243,6 +257,9 @@ namespace EventListeners
             const double delta_y =
                 std::accumulate(accumulated_delta_y_.begin(), accumulated_delta_y_.end(), 0.0) * gesture_speed;
 
+            if (config->IsCancellationStarted() && std::abs(delta_x) < 1.0 && std::abs(delta_y) < 1.0)
+                return;
+
             config->SetCancellationStarted(false);
 
             // Move the mouse pointer based on the calculated vector
@@ -271,6 +288,7 @@ namespace EventListeners
         }
 
     private:
+        bool recontact_ready_ = false;
         std::unordered_map<int, TouchContact> recontact_anchors_;
         std::array<double, MAX_CONTACT_SIZE> accumulated_delta_x_ = {0.0};
         std::array<double, MAX_CONTACT_SIZE> accumulated_delta_y_ = {0.0};
