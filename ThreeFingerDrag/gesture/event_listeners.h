@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <unordered_map>
 
 namespace EventListeners
 {
@@ -14,6 +15,8 @@ namespace EventListeners
     constexpr auto MIN_VALID_TOUCH_CONTACTS = 1;
     constexpr auto INACTIVITY_THRESHOLD_MS = 100;
     constexpr auto GESTURE_START_THRESHOLD_MS = 50;
+    constexpr auto RECONTACT_MOVEMENT_FRACTION = 0.005;
+    constexpr auto RECONTACT_MOVEMENT_MIN_UNITS = 3.0;
 
     inline GlobalConfig* config = GlobalConfig::GetInstance();
 
@@ -44,6 +47,8 @@ namespace EventListeners
             const bool is_dragging = Cursor::IsLeftMouseDown();
             const bool is_initial_gesture = !is_dragging && args.data->can_perform_gesture;
             const auto current_time = args.time;
+            if (!config->IsCancellationStarted())
+                recontact_anchors_.clear();
 
             // If it's the initial gesture, set the gesture start time
             if (is_initial_gesture && !config->IsGestureStarted())
@@ -61,6 +66,8 @@ namespace EventListeners
                 if (CalculateElapsedTimeMs(config->GetCancellationTime(), current_time) >=
                     config->GetCancellationDelayMs())
                 {
+                    if (config->LogDebug())
+                        DEBUG("Cancelled re-contact: deadline expired.");
                     CancelGesture();
                     return;
                 }
@@ -69,6 +76,8 @@ namespace EventListeners
                     [](const TouchContact& contact) { return contact.on_surface; });
                 if (contact_count > NUM_TOUCH_CONTACTS_REQUIRED)
                 {
+                    if (config->LogDebug())
+                        DEBUG("Cancelled re-contact: too many fingers.");
                     CancelGesture();
                     return;
                 }
@@ -85,26 +94,33 @@ namespace EventListeners
                         });
                     if (current == args.data->contacts.end())
                     {
+                        if (config->LogDebug())
+                            DEBUG("Cancelled re-contact: a finger lifted or changed ID.");
                         CancelGesture();
                         return;
                     }
                 }
 
-                // Check existing contacts even when the third finger arrives in
-                // this event, so earlier single-finger motion cannot resume a drag.
+                // Compare with each finger's first landing position. A small
+                // fraction of touchpad travel filters out raw coordinate jitter.
                 for (const auto& contact : args.data->contacts)
                 {
                     if (!contact.on_surface)
                         continue;
 
-                    const auto previous = std::find_if(args.previous_data.begin(), args.previous_data.end(),
-                        [&contact](const TouchContact& item)
-                        {
-                            return item.on_surface && item.contact_id == contact.contact_id;
-                        });
-                    if (previous != args.previous_data.end() &&
-                        (contact.x != previous->x || contact.y != previous->y))
+                    const auto [anchor, inserted] = recontact_anchors_.emplace(contact.contact_id, contact);
+                    if (inserted)
+                        continue;
+
+                    const double x_threshold = std::max(RECONTACT_MOVEMENT_MIN_UNITS,
+                        (contact.maximum_x - contact.minimum_x) * RECONTACT_MOVEMENT_FRACTION);
+                    const double y_threshold = std::max(RECONTACT_MOVEMENT_MIN_UNITS,
+                        (contact.maximum_y - contact.minimum_y) * RECONTACT_MOVEMENT_FRACTION);
+                    if (std::abs(contact.x - anchor->second.x) >= x_threshold ||
+                        std::abs(contact.y - anchor->second.y) >= y_threshold)
                     {
+                        if (config->LogDebug())
+                            DEBUG("Cancelled re-contact: finger moved beyond threshold.");
                         CancelGesture();
                         return;
                     }
@@ -255,6 +271,7 @@ namespace EventListeners
         }
 
     private:
+        std::unordered_map<int, TouchContact> recontact_anchors_;
         std::array<double, MAX_CONTACT_SIZE> accumulated_delta_x_ = {0.0};
         std::array<double, MAX_CONTACT_SIZE> accumulated_delta_y_ = {0.0};
         std::array<std::chrono::time_point<std::chrono::steady_clock>, MAX_CONTACT_SIZE> movement_times_;
@@ -273,7 +290,11 @@ namespace EventListeners
                 // A partial re-contact ended before all three fingers returned.
                 if (std::any_of(args.previous_data.begin(), args.previous_data.end(),
                     [](const TouchContact& contact) { return contact.on_surface; }))
+                {
+                    if (config->LogDebug())
+                        DEBUG("Cancelled re-contact: partial fingers lifted.");
                     CancelGesture();
+                }
                 return;
             }
             if (!config->IsGestureStarted())
