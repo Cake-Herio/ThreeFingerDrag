@@ -53,32 +53,6 @@ namespace EventListeners
                     DEBUG("Started gesture.");
             }
 
-            // After all fingers lift, keep the drag held during the cancellation delay.
-            // Fingers may return one at a time; partial contact must not end the drag.
-            if (config->IsCancellationStarted())
-            {
-                if (CalculateElapsedTimeMs(config->GetCancellationTime(), current_time) >=
-                    config->GetCancellationDelayMs())
-                {
-                    CancelGesture();
-                    return;
-                }
-
-                if (!args.data->can_perform_gesture)
-                {
-                    accumulated_delta_x_.fill(0);
-                    accumulated_delta_y_.fill(0);
-                    return;
-                }
-
-                // Three fingers have returned: resume the held drag with a fresh
-                // stabilization period and without movement from the partial contacts.
-                config->SetCancellationStarted(false);
-                gesture_start_ = current_time;
-                accumulated_delta_x_.fill(0);
-                accumulated_delta_y_.fill(0);
-            }
-
             // If there's no previous data, return
             if (args.previous_data.empty())
                 return;
@@ -127,6 +101,13 @@ namespace EventListeners
 
                 if (ms_since_movement > INACTIVITY_THRESHOLD_MS)
                     continue;
+
+                // Cancel immediately if a previous cancellation has begun, and this is a non-gesture movement
+                if (config->IsCancellationStarted() && !args.data->can_perform_gesture && config->IsGestureStarted())
+                {
+                    CancelGesture();
+                    return;
+                }
 
                 // Calculate the movement delta for the current finger
                 const double x_diff = contact.x - previous_contact.x;
